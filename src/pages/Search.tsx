@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-function Home() {
+function Search() {
   const [query, setQuery] = useState('');
+  const [language, setLanguage] = useState('');
+  const [minStars, setMinStars] = useState('');
+  const [minForks, setMinForks] = useState('');
   const [repos, setRepos] = useState<{
     id: number;
     full_name: string;
@@ -17,15 +20,38 @@ function Home() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    // Check if a query is passed via URL and trigger search
     const queryFromParams = searchParams.get('query');
-    if (queryFromParams) {
-      setQuery(queryFromParams);
+    const languageFromParams = searchParams.get('language');
+    const minStarsFromParams = searchParams.get('minStars');
+    const minForksFromParams = searchParams.get('minForks');
+  
+    if (queryFromParams) setQuery(queryFromParams);
+    if (languageFromParams) setLanguage(languageFromParams);
+    if (minStarsFromParams) setMinStars(minStarsFromParams);
+    if (minForksFromParams) setMinForks(minForksFromParams);
+  
+    // Load results from localStorage if available
+    const storedHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+    const matchingHistory = storedHistory.find(
+      (item: any) =>
+        item.query === queryFromParams &&
+        item.filters.language === languageFromParams &&
+        item.filters.minStars === minStarsFromParams &&
+        item.filters.minForks === minForksFromParams
+    );
+  
+    if (matchingHistory) {
+      setRepos(matchingHistory.results || []);
+    } else if (queryFromParams) {
       handleSearch(queryFromParams);
     }
   }, [searchParams]);
 
-  const handleSearch = async (searchQuery = query, sortBy: 'stars' | 'forks' | '' = '', sortOrder: 'asc' | 'desc' = 'desc') => {
+  const handleSearch = async (
+    searchQuery = query,
+    sortBy: 'stars' | 'forks' | '' = '',
+    sortOrder: 'asc' | 'desc' = 'desc'
+  ) => {
     if (!searchQuery) return;
 
     setLoading(true);
@@ -33,20 +59,39 @@ function Home() {
     setRepos([]);
 
     try {
+      let filters = `${searchQuery}+in:name,description,readme,topics`;
+      if (language) filters += `+language:${language}`;
+      if (minStars) filters += `+stars:>=${minStars}`;
+      if (minForks) filters += `+forks:>=${minForks}`;
       const sortParam = sortBy ? `&sort=${sortBy}&order=${sortOrder}` : '';
-      const response = await fetch(
-        `https://api.github.com/search/repositories?q=${searchQuery}+in:name,description,readme,topics&per_page=10${sortParam}`
-      );
+      const apiUrl = `https://api.github.com/search/repositories?q=${filters}&per_page=10${sortParam}`;
+
+      const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error('Failed to fetch repositories');
       }
       const data = await response.json();
       setRepos(data.items || []);
 
-      // Save the query to localStorage for history
+      // Save the search details and results to localStorage
+      const searchDetails = {
+        query: searchQuery,
+        filters: {
+          language,
+          minStars,
+          minForks,
+        },
+        url: apiUrl,
+        results: data.items || [],
+      };
+
       const storedHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
-      if (!storedHistory.includes(searchQuery)) {
-        storedHistory.push(searchQuery);
+      const isDuplicate = storedHistory.some(
+        (item: any) => item.url === searchDetails.url
+      );
+
+      if (!isDuplicate) {
+        storedHistory.push(searchDetails);
         localStorage.setItem('searchHistory', JSON.stringify(storedHistory));
       }
     } catch (err: any) {
@@ -57,22 +102,7 @@ function Home() {
   };
 
   const handleSort = (sortBy: 'stars' | 'forks') => {
-    let newOrder: 'asc' | 'desc' | '' = '';
-
-    if (sort === sortBy) {
-      // Toggle between 'asc', 'desc', and '' (none)
-      if (order === 'desc') {
-        newOrder = 'asc';
-      } else if (order === 'asc') {
-        newOrder = '';
-      } else {
-        newOrder = 'desc';
-      }
-    } else {
-      // Default to 'desc' when switching to a new column
-      newOrder = 'desc';
-    }
-
+    const newOrder = sort === sortBy && order === 'desc' ? 'asc' : sort === sortBy && order === 'asc' ? '' : 'desc';
     setSort(newOrder ? sortBy : '');
     setOrder(newOrder);
     handleSearch(query, newOrder ? sortBy : '', newOrder || undefined);
@@ -89,16 +119,38 @@ function Home() {
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            handleSearch(e.currentTarget.value);
+            handleSearch();
           }
         }}
       />
+      <div style={{ margin: '10px 0' }}>
+        <input
+          type="text"
+          placeholder="Language (e.g., JavaScript)"
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          style={{ marginRight: '10px', padding: '5px' }}
+        />
+        <input
+          type="number"
+          placeholder="Min Stars"
+          value={minStars}
+          onChange={(e) => setMinStars(e.target.value)}
+          style={{ marginRight: '10px', padding: '5px' }}
+        />
+        <input
+          type="number"
+          placeholder="Min Forks"
+          value={minForks}
+          onChange={(e) => setMinForks(e.target.value)}
+          style={{ padding: '5px' }}
+        />
+      </div>
       <button onClick={() => handleSearch()} disabled={loading}>
         {loading ? 'Searching...' : 'Search'}
       </button>
       {error && <p style={{ color: 'red' }}>{error}</p>}
       {repos.length > 0 && (
-        // should be a table component
         <table cellPadding="10" style={{ marginTop: '20px', width: '100%', textAlign: 'left' }}>
           <thead>
             <tr>
@@ -134,4 +186,4 @@ function Home() {
   );
 }
 
-export default Home;
+export default Search;
