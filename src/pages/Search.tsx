@@ -2,35 +2,39 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 function Search() {
-  const [query, setQuery] = useState('');
-  const [language, setLanguage] = useState('');
-  const [minStars, setMinStars] = useState('');
-  const [minForks, setMinForks] = useState('');
+  // State variables to manage input fields, search results, and UI states
+  const [query, setQuery] = useState(''); // Search query
+  const [language, setLanguage] = useState(''); // Programming language filter
+  const [minStars, setMinStars] = useState(''); // Minimum stars filter
+  const [minForks, setMinForks] = useState(''); // Minimum forks filter
   const [repos, setRepos] = useState<{
     id: number;
     full_name: string;
     html_url: string;
     stargazers_count: number;
     forks_count: number;
-  }[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [sort, setSort] = useState<'stars' | 'forks' | ''>('');
-  const [order, setOrder] = useState<'asc' | 'desc' | ''>('desc');
-  const [searchParams] = useSearchParams();
+  }[]>([]); // List of repositories
+  const [loading, setLoading] = useState(false); // Loading state
+  const [error, setError] = useState(''); // Error message
+  const [sort, setSort] = useState<'stars' | 'forks' | ''>(''); // Sorting column
+  const [order, setOrder] = useState<'asc' | 'desc' | ''>('desc'); // Sorting order
+  const [searchParams] = useSearchParams(); // URL search parameters
 
+  // Effect to populate input fields and load results from localStorage or API
   useEffect(() => {
+    // Extract query parameters from the URL
     const queryFromParams = searchParams.get('query');
     const languageFromParams = searchParams.get('language');
     const minStarsFromParams = searchParams.get('minStars');
     const minForksFromParams = searchParams.get('minForks');
   
+    // Populate input fields with query parameters
     if (queryFromParams) setQuery(queryFromParams);
     if (languageFromParams) setLanguage(languageFromParams);
     if (minStarsFromParams) setMinStars(minStarsFromParams);
     if (minForksFromParams) setMinForks(minForksFromParams);
   
-    // Load results from localStorage if available
+    // Check if results for the current query and filters exist in localStorage
     const storedHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
     const matchingHistory = storedHistory.find(
       (item: any) =>
@@ -40,13 +44,16 @@ function Search() {
         item.filters.minForks === minForksFromParams
     );
   
+    // If matching results are found in localStorage, use them
     if (matchingHistory) {
       setRepos(matchingHistory.results || []);
     } else if (queryFromParams) {
+      // Otherwise, fetch results from the API
       handleSearch(queryFromParams);
     }
   }, [searchParams]);
 
+  // Function to perform the search
   const handleSearch = async (
     searchQuery = query,
     sortBy: 'stars' | 'forks' | '' = '',
@@ -54,11 +61,12 @@ function Search() {
   ) => {
     if (!searchQuery) return;
 
-    setLoading(true);
-    setError('');
-    setRepos([]);
+    setLoading(true); // Set loading state
+    setError(''); // Clear any previous errors
+    setRepos([]); // Clear previous results
 
     try {
+      // Construct the API query with filters and sorting
       let filters = `${searchQuery}+in:name,description,readme,topics`;
       if (language) filters += `+language:${language}`;
       if (minStars) filters += `+stars:>=${minStars}`;
@@ -66,12 +74,13 @@ function Search() {
       const sortParam = sortBy ? `&sort=${sortBy}&order=${sortOrder}` : '';
       const apiUrl = `https://api.github.com/search/repositories?q=${filters}&per_page=10${sortParam}`;
 
+      // Fetch data from the GitHub API
       const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error('Failed to fetch repositories');
       }
       const data = await response.json();
-      setRepos(data.items || []);
+      setRepos(data.items || []); // Update the repository list
 
       // Save the search details and results to localStorage
       const searchDetails = {
@@ -85,6 +94,7 @@ function Search() {
         results: data.items || [],
       };
 
+      // Avoid duplicate entries in localStorage
       const storedHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
       const isDuplicate = storedHistory.some(
         (item: any) => item.url === searchDetails.url
@@ -95,22 +105,25 @@ function Search() {
         localStorage.setItem('searchHistory', JSON.stringify(storedHistory));
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message); // Handle errors
     } finally {
-      setLoading(false);
+      setLoading(false); // Reset loading state
     }
   };
 
+  // Function to handle sorting
   const handleSort = (sortBy: 'stars' | 'forks') => {
+    // Toggle sorting order or reset it
     const newOrder = sort === sortBy && order === 'desc' ? 'asc' : sort === sortBy && order === 'asc' ? '' : 'desc';
-    setSort(newOrder ? sortBy : '');
-    setOrder(newOrder);
-    handleSearch(query, newOrder ? sortBy : '', newOrder || undefined);
+    setSort(newOrder ? sortBy : ''); // Update sorting column
+    setOrder(newOrder); // Update sorting order
+    handleSearch(query, newOrder ? sortBy : '', newOrder || undefined); // Perform search with sorting
   };
 
   return (
     <div>
       <h1>Search GitHub Repositories</h1>
+      {/* Input field for search query */}
       <input
         className="search-input"
         type="text"
@@ -119,10 +132,11 @@ function Search() {
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            handleSearch();
+            handleSearch(); // Trigger search on Enter key press
           }
         }}
       />
+      {/* Input fields for filters */}
       <div style={{ margin: '10px 0' }}>
         <input
           type="text"
@@ -146,10 +160,13 @@ function Search() {
           style={{ padding: '5px' }}
         />
       </div>
+      {/* Search button */}
       <button onClick={() => handleSearch()} disabled={loading}>
         {loading ? 'Searching...' : 'Search'}
       </button>
+      {/* Error message */}
       {error && <p style={{ color: 'red' }}>{error}</p>}
+      {/* Display search results in a table */}
       {repos.length > 0 && (
         <table cellPadding="10" style={{ marginTop: '20px', width: '100%', textAlign: 'left' }}>
           <thead>
